@@ -82,12 +82,12 @@ async function revertVersion(tenant, workspace, artifact, version) {
   }
 }
 
-async function downloadVersionArtifact(tenant, symbolicName, version, isCurrentVersion) {
+async function downloadVersionArtifact(tenant, packageId, symbolicName, version, isCurrentVersion) {
   // The design time OData API serves every stored version read-only. The active
   // (draft) version is addressed as "Active", older versions by semantic version.
   const odataVersion = isCurrentVersion || version.state === "workingcopy" ? "Active" : version.semanticVersion;
   const versionLabel = isCurrentVersion || version.state === "workingcopy" ? "active" : version.semanticVersion ?? version.technicalVersion;
-  const url = `https://${tenant}/api/v1/IntegrationDesigntimeArtifacts(Id='${encodeURIComponent(symbolicName)}',Version='${encodeURIComponent(odataVersion)}')/$value`;
+  const url = `https://${tenant}/api/v1/IntegrationPackages('${encodeURIComponent(packageId)}')/IntegrationDesigntimeArtifacts(Id='${encodeURIComponent(symbolicName)}',Version='${encodeURIComponent(odataVersion)}')/$value`;
   const filename = `${symbolicName}_${String(versionLabel).replace(/[^\w.-]+/g, "_")}.zip`;
 
   try {
@@ -187,7 +187,7 @@ var plugin = {
         });
         popupContent.querySelectorAll("[data-version-download-index]").forEach((downloadButton) => {
           const version = dataOfVersionHistory[Number(downloadButton.dataset.versionDownloadIndex)];
-          downloadButton.addEventListener("click", () => downloadVersionArtifact(pluginHelper.tenant, symbolicName, version, version === currentVersion));
+          downloadButton.addEventListener("click", () => downloadVersionArtifact(pluginHelper.tenant, pluginHelper.currentPackageId, symbolicName, version, version === currentVersion));
         });
       }
       pluginHelper.functions.popup(popupContent, "Version History");
