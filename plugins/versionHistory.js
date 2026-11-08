@@ -82,6 +82,35 @@ async function revertVersion(tenant, workspace, artifact, version) {
   }
 }
 
+async function downloadVersionArtifact(tenant, symbolicName, version, isCurrentVersion) {
+  // The design time OData API serves every stored version read-only. The active
+  // (draft) version is addressed as "Active", older versions by semantic version.
+  const odataVersion = isCurrentVersion || version.state === "workingcopy" ? "Active" : version.semanticVersion;
+  const versionLabel = isCurrentVersion || version.state === "workingcopy" ? "active" : version.semanticVersion ?? version.technicalVersion;
+  const url = `https://${tenant}/api/v1/IntegrationDesigntimeArtifacts(Id='${encodeURIComponent(symbolicName)}',Version='${encodeURIComponent(odataVersion)}')/$value`;
+  const filename = `${symbolicName}_${String(versionLabel).replace(/[^\w.-]+/g, "_")}.zip`;
+
+  try {
+    const response = await fetch(url, { method: "GET", credentials: "same-origin" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+    showToast(`Download of version ${versionLabel} started.`, "Version History", "success");
+  } catch (error) {
+    console.log(`Failed to download version ${versionLabel}:`, error);
+    showToast(`Failed to download the artifact version (${error.message}).`, "Version History", "error");
+  }
+}
+
 var plugin = {
   metadataVersion: "1.0.0",
   id: "versionHistory",
@@ -103,7 +132,9 @@ var plugin = {
       const urlForArtifactsInWorkspace = `https://${pluginHelper.tenant}/api/1.0/workspace/${workspace}/artifacts`;
       // Find the current iFlow artifact in that workspace.
       var dataOfArtifactsInWorkspace = JSON.parse(await makeCallPromise("GET", urlForArtifactsInWorkspace, false));
-      const artifact = dataOfArtifactsInWorkspace.find((entry) => entry.name === pluginHelper.currentIflowName).id;
+      const artifactEntry = dataOfArtifactsInWorkspace.find((entry) => entry.name === pluginHelper.currentIflowName);
+      const artifact = artifactEntry.id;
+      const symbolicName = artifactEntry.tooltip || pluginHelper.currentIflowId || pluginHelper.currentArtifactId;
 
       const urlForVersionHistory = `https://${pluginHelper.tenant}/api/1.0/workspace/${workspace}/artifacts/${artifact}?versionhistory=true&webdav=REPORT`;
       // Load the artifact's version history.
@@ -126,6 +157,7 @@ var plugin = {
                                 <th>Created Date</th> 
                                 <th>Created By</th> 
                                 <th>State</th> 
+                                <th>Download</th> 
                                 <th>Revert</th> 
                               </tr> 
                             </thead><tbody> `;
@@ -139,6 +171,9 @@ var plugin = {
                           <td data-label="Created Date">${escapeHtml(createdDate)}</td> 
                           <td data-label="Created By">${escapeHtml(version.createdBy)}</td> 
                           <td data-label="State">${escapeHtml(version.state)}</td> 
+                          <td data-label="Download">
+                            <button class="ui button" data-version-download-index="${index}">Download</button>
+                          </td> 
                           <td data-label="Revert">
                             ${isCurrentVersion ? "Current Version" : `<button class="ui button" data-version-index="${index}">Revert</button>`}
                           </td> 
@@ -149,6 +184,10 @@ var plugin = {
         popupContent.querySelectorAll("[data-version-index]").forEach((revertButton) => {
           const version = dataOfVersionHistory[Number(revertButton.dataset.versionIndex)];
           revertButton.addEventListener("click", () => showRevertConfirmation(pluginHelper.tenant, workspace, artifact, version, currentVersion));
+        });
+        popupContent.querySelectorAll("[data-version-download-index]").forEach((downloadButton) => {
+          const version = dataOfVersionHistory[Number(downloadButton.dataset.versionDownloadIndex)];
+          downloadButton.addEventListener("click", () => downloadVersionArtifact(pluginHelper.tenant, symbolicName, version, version === currentVersion));
         });
       }
       pluginHelper.functions.popup(popupContent, "Version History");
