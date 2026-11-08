@@ -87,7 +87,10 @@ async function downloadVersionArtifact(tenant, packageId, symbolicName, version,
   // (draft) version is addressed as "Active", older versions by semantic version.
   const odataVersion = isCurrentVersion || version.state === "workingcopy" ? "Active" : version.semanticVersion;
   const versionLabel = isCurrentVersion || version.state === "workingcopy" ? "active" : version.semanticVersion ?? version.technicalVersion;
-  const url = `https://${tenant}/api/v1/IntegrationPackages('${encodeURIComponent(packageId)}')/IntegrationDesigntimeArtifacts(Id='${encodeURIComponent(symbolicName)}',Version='${encodeURIComponent(odataVersion)}')/$value`;
+  // CF tenants serve the design UI on *.integrationsuite-cpiNNN and the OData API
+  // (/api/v1) on *.it-cpiNNN, so rewrite the host for the download endpoint.
+  const apiHost = tenant.replace(/\.integrationsuite-cpi/, ".it-cpi");
+  const url = `https://${apiHost}/api/v1/IntegrationPackages('${encodeURIComponent(packageId)}')/IntegrationDesigntimeArtifacts(Id='${encodeURIComponent(symbolicName)}',Version='${encodeURIComponent(odataVersion)}')/$value`;
   const filename = `${symbolicName}_${String(versionLabel).replace(/[^\w.-]+/g, "_")}.zip`;
 
   try {
